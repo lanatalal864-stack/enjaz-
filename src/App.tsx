@@ -35,7 +35,6 @@ import {
   Pencil,
   Sparkles,
   Book,
-  FileText,
   Activity,
   ArrowRight,
   Monitor,
@@ -107,6 +106,23 @@ interface UserProfile {
   phone: string;
   generation: string;
 }
+
+type ScheduleEvent = {
+  start: string;
+  end: string;
+  label: string;
+  emoji: string;
+  kind: "study" | "break" | "lunch" | "morning" | "wind" | "prayer" | "other";
+};
+
+type StructuredSchedule = {
+  studentName: string;
+  inputs: { wake: string; sleep: string; hours: string; lunch: string; pref: "day" | "night" };
+  events: ScheduleEvent[];
+  tips: string[];
+  scheduledMinutes: number;
+  requestedMinutes: number;
+};
 
 interface Task {
   id: string;
@@ -235,7 +251,7 @@ const Button = ({
 // --- App Component ---
 export default function App() {
   const [page, setPage] = useState<
-    "landing" | "auth" | "setup" | "dashboard" | "study" | "revision" | "schedule"
+    "landing" | "auth" | "setup" | "dashboard" | "study" | "revision" | "schedule" | "books"
   >("landing");
   const [user, setUser] = useState<UserProfile | null>(() => {
     const saved = localStorage.getItem("enjez_user");
@@ -331,7 +347,6 @@ export default function App() {
       backToDashboard: "العودة للوحة المتابعة",
       selectGeneration: "اختر الجيل...",
       books: "الكتب",
-      exams: "الامتحانات",
       schedule: "الجدول",
       createSchedule: "عمل جدول",
       scheduleTitle: "الجدول الدراسي الذكي",
@@ -355,9 +370,9 @@ export default function App() {
       enterExamDate: "أدخل تاريخ آخر يوم امتحانات",
       saveDate: "حفظ التاريخ",
       day: "يوم",
-      selectSubjectsTitle: "اختر المواد الخاصة بك",
+      selectSubjectsTitle: "قم باختيار موادك الوزارية:",
       selectSubjectsDesc:
-        "الرجاء اختيار 4 مواد لتتبع تقدم مراجعتك فيها. (يمكنك الاختيار مرة واحدة)",
+        "الرجاء اختيار 4 مواد بالضبط لتتبع تقدم مراجعتك فيها. (يمكنك الاختيار مرة واحدة)",
       saveSubjects: "حفظ المواد",
       noSubjectsSelected: "لم تقم باختيار المواد بعد.",
       goToRevision: "اذهب لتتبع المراجعات",
@@ -420,7 +435,6 @@ export default function App() {
       backToDashboard: "Back to Dashboard",
       selectGeneration: "Select Generation...",
       books: "Books",
-      exams: "Exams",
       schedule: "Schedule",
       createSchedule: "Create Schedule",
       scheduleTitle: "Smart Study Schedule",
@@ -508,6 +522,7 @@ export default function App() {
             onGoTimer={() => setPage("study")}
             onGoRevision={() => setPage("revision")}
             onGoSchedule={() => setPage("schedule")}
+            onGoBooks={() => setPage("books")}
             onLogout={() => {
               localStorage.removeItem("enjez_user");
               setUser(null);
@@ -541,6 +556,15 @@ export default function App() {
           <ScheduleDashboard
             key="schedule"
             user={user}
+            t={t}
+            lang={lang}
+            theme={theme}
+            onBack={() => setPage("dashboard")}
+          />
+        )}
+        {page === "books" && user && (
+          <BooksPage
+            key="books"
             t={t}
             lang={lang}
             theme={theme}
@@ -1036,6 +1060,21 @@ function AuthPage({
 }
 
 // --- Setup Subject Page (After Auth if needed) ---
+const MINISTERIAL_SUBJECTS_2008: { id: string; title: string }[] = [
+  { id: "2008_en_adv", title: "اللغة الإنجليزية متقدم" },
+  { id: "2008_ar_spec", title: "اللغة العربية تخصص" },
+  { id: "2008_bio", title: "الأحياء" },
+  { id: "2008_chem", title: "الكيمياء" },
+  { id: "2008_phys", title: "الفيزياء" },
+  { id: "2008_math_adv", title: "الرياضيات المتقدم" },
+  { id: "2008_bus_math", title: "رياضيات الأعمال" },
+  { id: "2008_earth", title: "علوم الأرض" },
+  { id: "2008_hist_spec", title: "تاريخ الأردن تخصص" },
+  { id: "2008_islamic_spec", title: "التربية الإسلامية تخصص" },
+  { id: "2008_psych", title: "علم النفس والاجتماع" },
+  { id: "2008_geo", title: "الجغرافيا" },
+];
+
 function SetupSubjectPage({
   user,
   onComplete,
@@ -1050,17 +1089,21 @@ function SetupSubjectPage({
   lang: "ar" | "en";
   key?: string;
 }) {
-  const availableSubjects = getSubjectsForGeneration(user.generation);
+  const availableSubjects =
+    user.generation === "2008"
+      ? MINISTERIAL_SUBJECTS_2008
+      : getSubjectsForGeneration(user.generation);
+
   const [tempSelection, setTempSelection] = useState<string[]>([]);
+  const limitReached = tempSelection.length >= 4;
 
   const handleToggleSelection = (id: string) => {
     if (tempSelection.includes(id)) {
       setTempSelection(tempSelection.filter((s) => s !== id));
-    } else {
-      if (tempSelection.length < 4) {
-        setTempSelection([...tempSelection, id]);
-      }
+      return;
     }
+    if (limitReached) return;
+    setTempSelection([...tempSelection, id]);
   };
 
   const handleSaveSubjects = () => {
@@ -1071,7 +1114,7 @@ function SetupSubjectPage({
   };
 
   return (
-    <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center p-4" dir="rtl">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -1088,59 +1131,88 @@ function SetupSubjectPage({
           <Layers size={40} />
         </div>
         <h2
-          className="text-3xl font-black mb-4"
+          className="text-3xl font-black mb-3"
           style={{ color: theme.primary }}
         >
-          {t.selectSubjectsTitle}
+          قم باختيار موادك الوزارية:
         </h2>
-        <p className="text-xl opacity-60 font-medium mb-10 text-gray-600 max-w-lg mx-auto">
-          {t.selectSubjectsDesc}
+        <div className="flex items-center justify-center gap-3 mb-4">
+          <span
+            className="px-4 py-1.5 rounded-full text-sm font-black tabular-nums"
+            style={{
+              backgroundColor: tempSelection.length === 4 ? theme.primary : `${theme.primary}15`,
+              color: tempSelection.length === 4 ? "#ffffff" : theme.primary,
+            }}
+          >
+            {tempSelection.length} / 4
+          </span>
+          <span className="text-sm font-bold opacity-70" style={{ color: theme.primary }}>
+            {tempSelection.length === 4 ? "تم تحديد العدد المطلوب ✓" : "مواد محددة"}
+          </span>
+        </div>
+        <p className="text-lg opacity-60 font-medium mb-10 text-gray-600 max-w-lg mx-auto">
+          الرجاء اختيار 4 مواد بالضبط لتتبع تقدم مراجعتك فيها.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10 text-right pr-2 max-h-[50vh] overflow-y-auto custom-scrollbar">
           {availableSubjects.map((subject) => {
             const isSelected = tempSelection.includes(subject.id);
-            const isDisabled = !isSelected && tempSelection.length >= 4;
+            const isDisabled = !isSelected && limitReached;
             return (
               <button
                 key={subject.id}
+                type="button"
                 onClick={() => handleToggleSelection(subject.id)}
                 disabled={isDisabled}
+                aria-pressed={isSelected}
                 className={cn(
-                  "p-6 rounded-2xl border-2 transition-all flex items-center justify-between group",
+                  "relative p-6 rounded-2xl border-2 transition-all flex items-center justify-between group",
                   isSelected
-                    ? "border-transparent text-white shadow-xl"
-                    : "border-gray-200 bg-transparent hover:border-gray-300",
-                  isDisabled ? "opacity-50 cursor-not-allowed" : "",
+                    ? "border-transparent text-white shadow-xl scale-[1.02] ring-4 ring-offset-2"
+                    : "border-gray-200 bg-white hover:border-gray-400 hover:shadow-md hover:-translate-y-0.5",
+                  isDisabled ? "opacity-40 cursor-not-allowed grayscale" : "cursor-pointer",
                 )}
                 style={{
-                  backgroundColor: isSelected ? theme.primary : "transparent",
+                  backgroundColor: isSelected ? theme.primary : "white",
+                  ...(isSelected ? { ["--tw-ring-color" as any]: `${theme.primary}40` } : {}),
                 }}
               >
+                {isSelected && (
+                  <span
+                    className="absolute -top-2 -left-2 w-7 h-7 rounded-full bg-white flex items-center justify-center shadow-lg"
+                    style={{ color: theme.primary }}
+                  >
+                    <Check size={16} strokeWidth={3} />
+                  </span>
+                )}
                 <div
                   className={cn(
                     "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors shrink-0",
                     isSelected
-                      ? "border-white bg-white/20"
-                      : "border-gray-300 group-hover:border-gray-400",
+                      ? "border-white bg-white/25"
+                      : "border-gray-300 group-hover:border-gray-500",
                   )}
                 >
-                  {isSelected && <Check size={14} className="text-white" />}
+                  {isSelected && <Check size={14} className="text-white" strokeWidth={3} />}
                 </div>
-                <span className="font-bold text-lg mr-3 text-right flex-1 leading-snug">{subject.title}</span>
+                <span className="font-bold text-lg mr-3 text-right flex-1 leading-snug">
+                  {subject.title}
+                </span>
               </button>
             );
           })}
         </div>
 
         <div className="flex flex-col items-center">
-          <p className="font-bold mb-4" style={{ color: theme.primary }}>
-            {tempSelection.length} / 4
-          </p>
+          {tempSelection.length < 4 && (
+            <p className="text-sm font-bold mb-3 opacity-70" style={{ color: theme.primary }}>
+              اختر {4 - tempSelection.length} {4 - tempSelection.length === 1 ? "مادة" : "مواد"} إضافية لتفعيل الزر
+            </p>
+          )}
           <Button
             onClick={handleSaveSubjects}
             disabled={tempSelection.length !== 4}
-            className="w-full max-w-xs py-4 text-xl disabled:opacity-50"
+            className="w-full max-w-xs py-4 text-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
             style={{ backgroundColor: theme.primary }}
           >
             {t.saveSubjects}
@@ -1162,6 +1234,7 @@ function StudentDashboard({
   onGoTimer,
   onGoRevision,
   onGoSchedule,
+  onGoBooks,
   onLogout,
 }: {
   user: UserProfile;
@@ -1173,14 +1246,41 @@ function StudentDashboard({
   onGoTimer: () => void;
   onGoRevision: () => void;
   onGoSchedule: () => void;
+  onGoBooks: () => void;
   onLogout: () => void;
   key?: string;
 }) {
   const [showTheme, setShowTheme] = useState(false);
+
+  const userId = user ? (user.phone || user.name) : null;
+  const countdownKey = userId ? `enjez_countdown_${userId}` : null;
+
   const [examDateStr, setExamDateStr] = useState<string | null>(() =>
-    localStorage.getItem("enjez_exam_date"),
+    countdownKey ? localStorage.getItem(countdownKey) : null,
   );
   const [tempDate, setTempDate] = useState("");
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!countdownKey) {
+      setExamDateStr(null);
+      return;
+    }
+    setExamDateStr(localStorage.getItem(countdownKey));
+  }, [countdownKey]);
+
+  useEffect(() => {
+    if (!examDateStr) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [examDateStr]);
+
+  const resetExamDate = () => {
+    if (!countdownKey) return;
+    localStorage.removeItem(countdownKey);
+    setExamDateStr(null);
+    setTempDate("");
+  };
 
   // Calculate subjects progress
   const [selectedSubjectIds] = useState<string[]>(() => {
@@ -1227,19 +1327,27 @@ function StudentDashboard({
 
   const saveExamDate = (e: React.FormEvent) => {
     e.preventDefault();
-    if (tempDate) {
-      localStorage.setItem("enjez_exam_date", tempDate);
-      setExamDateStr(tempDate);
-    }
+    if (!countdownKey || !tempDate) return;
+    localStorage.setItem(countdownKey, tempDate);
+    setExamDateStr(tempDate);
   };
 
-  // Calculate days remaining
+  // Calculate days remaining (kept for legacy consumers)
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const examDate = examDateStr ? new Date(examDateStr) : null;
   const diffTime = examDate ? examDate.getTime() - today.getTime() : 0;
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   const daysRemaining = diffDays > 0 ? diffDays : 0;
+
+  // Live countdown (D / H / M / S)
+  const examEndMs = examDate ? new Date(examDateStr + "T23:59:59").getTime() : 0;
+  const liveDiff = Math.max(0, examEndMs - now);
+  const cdDays = Math.floor(liveDiff / (1000 * 60 * 60 * 24));
+  const cdHours = Math.floor((liveDiff / (1000 * 60 * 60)) % 24);
+  const cdMinutes = Math.floor((liveDiff / (1000 * 60)) % 60);
+  const cdSeconds = Math.floor((liveDiff / 1000) % 60);
+  const pad2 = (n: number) => n.toString().padStart(2, "0");
 
   const currentHour = new Date().getHours();
   const isMorning = currentHour >= 3 && currentHour < 12;
@@ -1260,16 +1368,12 @@ function StudentDashboard({
           />
         </div>
         <nav className="space-y-4">
-          <button className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl hover:bg-white/10 transition-colors group">
+          <button
+            onClick={onGoBooks}
+            className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl hover:bg-white/10 transition-colors group"
+          >
             <Book size={24} className="text-white/80 group-hover:text-white" />
             <span className="font-bold text-lg">{t.books}</span>
-          </button>
-          <button className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl hover:bg-white/10 transition-colors group">
-            <FileText
-              size={24}
-              className="text-white/80 group-hover:text-white"
-            />
-            <span className="font-bold text-lg">{t.exams}</span>
           </button>
           <button
             onClick={onGoRevision}
@@ -1473,7 +1577,8 @@ function StudentDashboard({
 
             {/* Right Column */}
             <div className="flex flex-col gap-6">
-              {/* Exam Countdown Card */}
+              {/* Exam Countdown Card — per-user, only when logged in */}
+              {user && countdownKey && (
               <div
                 className="bg-white rounded-[2rem] p-6 shadow-[0_10px_30px_rgba(3,19,188,0.04)] border border-transparent relative overflow-hidden"
                 style={{ borderColor: `${theme.primary}10` }}
@@ -1502,11 +1607,12 @@ function StudentDashboard({
                         className="text-sm font-bold opacity-70"
                         style={{ color: theme.primary }}
                       >
-                        {t.enterExamDate}
+                        {lang === "ar" ? "حدد تاريخ نهاية المراجعة:" : t.enterExamDate}
                       </label>
                       <input
                         type="date"
                         required
+                        min={new Date().toISOString().split("T")[0]}
                         value={tempDate}
                         onChange={(e) => setTempDate(e.target.value)}
                         className="w-full p-2.5 rounded-xl border bg-[#f8f9ff] text-center font-mono outline-none focus:ring-2"
@@ -1520,46 +1626,81 @@ function StudentDashboard({
                         className="w-full py-2.5 rounded-xl font-bold text-white transition-all hover:opacity-90"
                         style={{ backgroundColor: theme.primary }}
                       >
-                        {t.saveDate}
+                        {lang === "ar" ? "بدء العد التنازلي" : "Start Countdown"}
                       </button>
                     </form>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between w-full relative z-10" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-                    <div
-                      className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0"
-                      style={{
-                        backgroundColor: `${theme.primary}15`,
-                        color: theme.primary,
-                      }}
-                    >
-                      <CalendarIcon size={28} />
-                    </div>
-                    <div className="flex flex-col items-end">
-                      <h3
-                        className="text-xs font-bold uppercase tracking-wider mb-0 opacity-70"
-                        style={{ color: theme.primary }}
+                  <div className="relative z-10 flex flex-col gap-4" dir={lang === "ar" ? "rtl" : "ltr"}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div
+                        className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"
+                        style={{
+                          backgroundColor: `${theme.primary}15`,
+                          color: theme.primary,
+                        }}
                       >
-                        {t.daysRemaining}
-                      </h3>
-                      <div className="flex items-baseline gap-1" dir="ltr">
-                        <span
-                          className="text-4xl font-black leading-none"
-                          style={{ color: theme.primary }}
-                        >
-                          {daysRemaining}
-                        </span>
-                        <span
-                          className="text-sm font-bold opacity-60 ml-1"
-                          style={{ color: theme.primary }}
-                        >
-                          {t.day}
-                        </span>
+                        <CalendarIcon size={24} />
                       </div>
+                      <div className="flex-1 text-right">
+                        <h3
+                          className="text-xs font-bold uppercase tracking-wider mb-0.5 opacity-70"
+                          style={{ color: theme.primary }}
+                        >
+                          {t.daysRemaining}
+                        </h3>
+                        <p className="text-[11px] font-mono opacity-60" style={{ color: theme.primary }} dir="ltr">
+                          {examDateStr}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={resetExamDate}
+                        title={lang === "ar" ? "إعادة تعيين التاريخ" : "Reset date"}
+                        className="p-2 rounded-xl transition-all hover:opacity-80 shrink-0"
+                        style={{
+                          backgroundColor: `${theme.primary}10`,
+                          color: theme.primary,
+                        }}
+                      >
+                        <X size={16} />
+                      </button>
                     </div>
+
+                    <div className="grid grid-cols-4 gap-2" dir="ltr">
+                      {[
+                        { label: lang === "ar" ? "يوم" : "Days", value: cdDays },
+                        { label: lang === "ar" ? "ساعة" : "Hrs", value: cdHours },
+                        { label: lang === "ar" ? "دقيقة" : "Min", value: cdMinutes },
+                        { label: lang === "ar" ? "ثانية" : "Sec", value: cdSeconds },
+                      ].map((u) => (
+                        <div
+                          key={u.label}
+                          className="rounded-xl py-2.5 flex flex-col items-center justify-center"
+                          style={{
+                            backgroundColor: `${theme.primary}10`,
+                            color: theme.primary,
+                          }}
+                        >
+                          <span className="text-2xl font-black leading-none tabular-nums">
+                            {pad2(u.value)}
+                          </span>
+                          <span className="text-[10px] font-bold opacity-70 mt-1">
+                            {u.label}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {liveDiff === 0 && (
+                      <p className="text-center text-xs font-bold" style={{ color: theme.primary }}>
+                        {lang === "ar" ? "انتهى الوقت! بالتوفيق 💙" : "Time's up! Good luck 💙"}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
+              )}
 
               {/* Go to Timer Card */}
               <motion.div
@@ -1776,14 +1917,27 @@ function RevisionDashboard({
               <Layers size={40} />
             </div>
             <h2
-              className="text-3xl font-black mb-4"
+              className="text-3xl font-black mb-3"
               style={{ color: theme.primary }}
             >
-              {t.selectSubjectsTitle}
+              قم باختيار موادك الوزارية:
             </h2>
-            <p className="text-xl opacity-60 font-medium mb-10 text-gray-600 max-w-lg mx-auto">
-              {t.selectSubjectsDesc}
-            </p>
+            <div className="flex items-center justify-center gap-3 mb-8">
+              <span
+                className="px-4 py-1.5 rounded-full text-sm font-black tabular-nums"
+                style={{
+                  backgroundColor: tempSelection.length === 4 ? theme.primary : `${theme.primary}15`,
+                  color: tempSelection.length === 4 ? "#ffffff" : theme.primary,
+                }}
+              >
+                تم اختيار {tempSelection.length} من 4
+              </span>
+              {tempSelection.length === 4 && (
+                <span className="text-sm font-bold" style={{ color: theme.primary }}>
+                  ✓ جاهز للتأكيد
+                </span>
+              )}
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-10 text-right">
               {availableSubjects.map((subject) => {
@@ -1792,31 +1946,40 @@ function RevisionDashboard({
                 return (
                   <button
                     key={subject.id}
+                    type="button"
                     onClick={() => handleToggleSelection(subject.id)}
                     disabled={isDisabled}
+                    aria-pressed={isSelected}
                     className={cn(
-                      "p-6 rounded-2xl border-2 transition-all flex items-center justify-between group",
+                      "relative p-6 rounded-2xl border-2 transition-all flex items-center justify-between group",
                       isSelected
-                        ? "border-transparent text-white shadow-xl"
-                        : "border-gray-200 bg-transparent hover:border-gray-300",
-                      isDisabled ? "opacity-50 cursor-not-allowed" : "",
+                        ? "border-transparent text-white shadow-xl scale-[1.02] ring-4 ring-offset-2"
+                        : "border-gray-200 bg-white hover:border-gray-400 hover:shadow-md hover:-translate-y-0.5",
+                      isDisabled ? "opacity-40 cursor-not-allowed grayscale" : "cursor-pointer",
                     )}
                     style={{
-                      backgroundColor: isSelected
-                        ? theme.primary
-                        : "transparent",
+                      backgroundColor: isSelected ? theme.primary : "white",
+                      ...(isSelected ? { ["--tw-ring-color" as any]: `${theme.primary}40` } : {}),
                     }}
                   >
+                    {isSelected && (
+                      <span
+                        className="absolute -top-2 -left-2 w-7 h-7 rounded-full bg-white flex items-center justify-center shadow-lg"
+                        style={{ color: theme.primary }}
+                      >
+                        <Check size={16} strokeWidth={3} />
+                      </span>
+                    )}
                     <span className="font-bold text-lg">{subject.title}</span>
                     <div
                       className={cn(
-                        "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors",
+                        "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors shrink-0",
                         isSelected
-                          ? "border-white bg-white/20"
-                          : "border-gray-300 group-hover:border-gray-400",
+                          ? "border-white bg-white/25"
+                          : "border-gray-300 group-hover:border-gray-500",
                       )}
                     >
-                      {isSelected && <Check size={14} className="text-white" />}
+                      {isSelected && <Check size={14} className="text-white" strokeWidth={3} />}
                     </div>
                   </button>
                 );
@@ -1824,16 +1987,18 @@ function RevisionDashboard({
             </div>
 
             <div className="flex flex-col items-center">
-              <p className="font-bold mb-4" style={{ color: theme.primary }}>
-                {tempSelection.length} / 4
-              </p>
+              {tempSelection.length < 4 && (
+                <p className="text-sm font-bold mb-3 opacity-70" style={{ color: theme.primary }}>
+                  اختر {4 - tempSelection.length} {4 - tempSelection.length === 1 ? "مادة" : "مواد"} إضافية لتفعيل الزر
+                </p>
+              )}
               <Button
                 onClick={handleSaveSubjects}
                 disabled={tempSelection.length !== 4}
-                className="w-full max-w-xs py-4 text-xl disabled:opacity-50"
+                className="w-full max-w-xs py-4 text-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                 style={{ backgroundColor: theme.primary }}
               >
-                {t.saveSubjects}
+                تأكيد الاختيار
               </Button>
             </div>
           </div>
@@ -1981,6 +2146,150 @@ function RevisionDashboard({
               })}
           </div>
         )}
+      </main>
+    </motion.div>
+  );
+}
+
+// --- Books Page (Generation 2009) ---
+const BOOKS_2009: { key: string; title: string; titleEn: string; description: string; descriptionEn: string; emoji: string; url: string }[] = [
+  {
+    key: "english",
+    title: "اللغة الإنجليزية",
+    titleEn: "English Language",
+    description: "كتاب الإنجليزي للجيل الثاني عشر — قراءات، مفردات، وقواعد.",
+    descriptionEn: "Grade 12 English textbook — readings, vocabulary, and grammar.",
+    emoji: "🇬🇧",
+    url: "https://notebooklm.google.com/notebook/fff56b20-334a-4892-aee6-77b0c39aa01a",
+  },
+  {
+    key: "arabic",
+    title: "اللغة العربية",
+    titleEn: "Arabic Language",
+    description: "كتاب اللغة العربية — النصوص الأدبية، النحو، والبلاغة.",
+    descriptionEn: "Arabic textbook — literary texts, grammar, and rhetoric.",
+    emoji: "📜",
+    url: "https://notebooklm.google.com/notebook/b521a0ee-d214-4a58-98ac-436b18247202",
+  },
+  {
+    key: "islamic",
+    title: "التربية الإسلامية",
+    titleEn: "Islamic Education",
+    description: "كتاب التربية الإسلامية — العقيدة، الفقه، والسيرة.",
+    descriptionEn: "Islamic Education — creed, jurisprudence, and biography.",
+    emoji: "🕌",
+    url: "https://notebooklm.google.com/notebook/9f43a7e0-5046-4e11-b4e7-bf5d3601bea6",
+  },
+  {
+    key: "history",
+    title: "تاريخ الأردن",
+    titleEn: "Jordanian History",
+    description: "كتاب تاريخ الأردن — المراحل التاريخية وبناء الدولة.",
+    descriptionEn: "Jordanian History — historical phases and state-building.",
+    emoji: "🇯🇴",
+    url: "https://notebooklm.google.com/notebook/dbf6059c-2582-4e50-9485-0cc7800c52cc",
+  },
+];
+
+function BooksPage({
+  t,
+  lang,
+  theme,
+  onBack,
+}: {
+  t: any;
+  lang: "ar" | "en";
+  theme: any;
+  onBack: () => void;
+  key?: string;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className="min-h-screen bg-[#f8f9ff] flex flex-col overflow-hidden"
+      dir={lang === "ar" ? "rtl" : "ltr"}
+    >
+      <header className="h-24 px-6 sm:px-10 flex items-center justify-between sticky top-0 z-10 w-full bg-[#f8f9ff]/80 backdrop-blur-md">
+        <div className="flex items-center gap-4">
+          <div
+            className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"
+            style={{ backgroundColor: `${theme.primary}15`, color: theme.primary }}
+          >
+            <Book size={24} />
+          </div>
+          <h1 className="text-2xl font-black" style={{ color: theme.primary }}>
+            {lang === "ar" ? "الكتب الدراسية" : "Study Books"}
+          </h1>
+        </div>
+        <button
+          onClick={onBack}
+          className="p-3 bg-white rounded-xl shadow-sm border border-[#0313bc]/10 hover:bg-[#0313bc]/5 transition-colors flex items-center gap-2"
+          style={{ color: theme.primary }}
+        >
+          <span className="font-bold hidden sm:block px-2">
+            {t.backToDashboard || (lang === "ar" ? "العودة للوحة" : "Back to Dashboard")}
+          </span>
+          <ArrowRight size={20} className={lang === "ar" ? "" : "rotate-180"} />
+        </button>
+      </header>
+
+      <main className="flex-1 p-6 sm:p-10 max-w-6xl w-full mx-auto overflow-y-auto">
+        <div className="mb-8 text-center">
+          <h2 className="text-3xl md:text-4xl font-black mb-2" style={{ color: theme.primary }}>
+            {lang === "ar" ? "📚 مكتبتك الدراسية" : "📚 Your Study Library"}
+          </h2>
+          <p className="text-base font-medium opacity-60 text-gray-600">
+            {lang === "ar"
+              ? "كتب التوجيهي للجيل 2009 — افتح أي مادة مباشرة من هنا"
+              : "Generation 2009 textbooks — open any subject directly"}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          {BOOKS_2009.map((book, idx) => (
+            <motion.div
+              key={book.key}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.08 }}
+              className="bg-white rounded-[2rem] p-6 md:p-8 shadow-[0_15px_40px_rgba(3,19,188,0.05)] border-2 border-transparent hover:border-[#0313bc]/20 hover:shadow-[0_20px_50px_rgba(3,19,188,0.12)] hover:-translate-y-1 transition-all duration-300 flex flex-col"
+              style={{ borderColor: `${theme.primary}10` }}
+            >
+              <div className="flex items-start gap-4 mb-4">
+                <div
+                  className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl shrink-0 shadow-sm"
+                  style={{
+                    backgroundColor: `${theme.primary}10`,
+                    color: theme.primary,
+                  }}
+                >
+                  <span>{book.emoji}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-xl md:text-2xl font-black mb-1" style={{ color: theme.primary }}>
+                    {lang === "ar" ? book.title : book.titleEn}
+                  </h3>
+                  <p className="text-sm font-medium text-gray-600 leading-relaxed">
+                    {lang === "ar" ? book.description : book.descriptionEn}
+                  </p>
+                </div>
+              </div>
+
+              <a
+                href={book.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-auto flex items-center justify-center gap-2 w-full py-3 rounded-2xl font-bold text-white shadow-md hover:opacity-90 active:scale-[0.98] transition-all"
+                style={{ backgroundColor: theme.primary }}
+              >
+                <Book size={18} />
+                <span>{lang === "ar" ? "فتح الكتاب" : "Open Book"}</span>
+              </a>
+            </motion.div>
+          ))}
+        </div>
       </main>
     </motion.div>
   );
@@ -3262,6 +3571,137 @@ function TaskManagerModal({
   );
 }
 
+// --- Schedule View (structured renderer) ---
+function ScheduleView({
+  data,
+  theme,
+  lang,
+}: {
+  data: StructuredSchedule;
+  theme: any;
+  lang: "ar" | "en";
+}) {
+  const L = (ar: string, en: string) => (lang === "ar" ? ar : en);
+  const kindStyle: Record<ScheduleEvent["kind"], { bg: string; ring: string; text: string }> = {
+    study:   { bg: "bg-[#eef0ff]", ring: "ring-[#0313bc]/20", text: "text-[#0313bc]" },
+    break:   { bg: "bg-amber-50",  ring: "ring-amber-200",     text: "text-amber-700" },
+    lunch:   { bg: "bg-emerald-50",ring: "ring-emerald-200",   text: "text-emerald-700" },
+    morning: { bg: "bg-orange-50", ring: "ring-orange-200",    text: "text-orange-700" },
+    wind:    { bg: "bg-indigo-50", ring: "ring-indigo-200",    text: "text-indigo-700" },
+    prayer:  { bg: "bg-teal-50",   ring: "ring-teal-200",      text: "text-teal-700" },
+    other:   { bg: "bg-gray-50",   ring: "ring-gray-200",      text: "text-gray-700" },
+  };
+
+  const peakLabel = data.inputs.pref === "day"
+    ? L("نهاراً ☀️", "Daytime ☀️")
+    : L("ليلاً 🌙", "Nighttime 🌙");
+
+  const summaryItems = [
+    { icon: "☀️", label: L("استيقاظ", "Wake"),   value: data.inputs.wake },
+    { icon: "🌙", label: L("نوم", "Sleep"),       value: data.inputs.sleep },
+    { icon: "📚", label: L("ساعات الدراسة", "Study"), value: `${data.inputs.hours}h` },
+    { icon: "🍽️", label: L("الغداء", "Lunch"),   value: data.inputs.lunch },
+    { icon: "🎯", label: L("ذروة التركيز", "Peak focus"), value: peakLabel },
+  ];
+
+  return (
+    <div className="space-y-6" dir={lang === "ar" ? "rtl" : "ltr"}>
+      {/* Header summary card */}
+      <div
+        className="rounded-[2rem] p-6 md:p-8 text-white shadow-[0_15px_40px_rgba(3,19,188,0.15)]"
+        style={{ backgroundColor: theme.primary }}
+      >
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-3xl">📅</span>
+          <h2 className="text-2xl md:text-3xl font-black">
+            {L(`جدول ${data.studentName} الذكي`, `${data.studentName}'s Smart Schedule`)}
+          </h2>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {summaryItems.map((it) => (
+            <div
+              key={it.label}
+              className="bg-white/15 backdrop-blur-sm rounded-2xl p-3 flex flex-col items-center text-center"
+            >
+              <span className="text-2xl mb-1">{it.icon}</span>
+              <span className="text-[11px] font-bold opacity-80 tracking-wider uppercase">{it.label}</span>
+              <span className="text-base font-black mt-0.5" dir="ltr">{it.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Timeline */}
+      <div className="bg-white rounded-[2rem] p-4 md:p-6 shadow-[0_10px_30px_rgba(3,19,188,0.04)] border border-[#0313bc]/10">
+        <h3
+          className="text-sm font-black uppercase tracking-wider mb-4 px-2"
+          style={{ color: theme.primary }}
+        >
+          {L("الجدول اليومي", "Daily Timeline")}
+        </h3>
+        <ol className="space-y-2">
+          {data.events.map((ev, i) => {
+            const s = kindStyle[ev.kind] || kindStyle.other;
+            return (
+              <li
+                key={i}
+                className={cn(
+                  "flex items-center gap-3 md:gap-4 rounded-2xl p-3 md:p-4 ring-1 transition-all hover:shadow-md",
+                  s.bg, s.ring,
+                )}
+              >
+                <span className="text-2xl md:text-3xl shrink-0 w-12 text-center">{ev.emoji}</span>
+                <div className="shrink-0 font-mono text-xs md:text-sm font-bold tabular-nums px-3 py-1.5 rounded-xl bg-white shadow-sm" dir="ltr" style={{ color: theme.primary }}>
+                  {ev.start} – {ev.end}
+                </div>
+                <span className={cn("flex-1 font-bold text-sm md:text-base", s.text)}>
+                  {ev.label}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+
+      {/* Tips highlight box */}
+      {data.tips.length > 0 && (
+        <div
+          className="rounded-[2rem] p-6 md:p-8 border-2 shadow-[0_10px_30px_rgba(3,19,188,0.04)]"
+          style={{
+            borderColor: `${theme.primary}30`,
+            backgroundColor: `${theme.primary}08`,
+          }}
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-2xl">💡</span>
+            <h3 className="text-lg md:text-xl font-black" style={{ color: theme.primary }}>
+              {L("نصائح مخصصة", "Personalized Tips")}
+            </h3>
+          </div>
+          <ul className="space-y-3">
+            {data.tips.map((tip, i) => (
+              <li
+                key={i}
+                className="flex items-start gap-3 bg-white rounded-2xl p-4 shadow-sm border border-[#0313bc]/5"
+              >
+                <span
+                  className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-black text-white"
+                  style={{ backgroundColor: theme.primary }}
+                >
+                  {i + 1}
+                </span>
+                <span className="font-medium text-sm md:text-base text-gray-700 leading-relaxed">
+                  {tip}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // --- Schedule Component ---
 function ScheduleDashboard({
   user,
@@ -3280,13 +3720,227 @@ function ScheduleDashboard({
   const [schedule, setSchedule] = useState<string | null>(() => {
     return localStorage.getItem("enjez_ai_schedule") || null;
   });
+  const [scheduleData, setScheduleData] = useState<StructuredSchedule | null>(() => {
+    const raw = localStorage.getItem("enjez_schedule_data");
+    try { return raw ? JSON.parse(raw) as StructuredSchedule : null; } catch { return null; }
+  });
   const [isGenerating, setIsGenerating] = useState(false);
-  const [showForm, setShowForm] = useState(!schedule);
+  const [showForm, setShowForm] = useState(!schedule && !scheduleData);
   const [wakeTime, setWakeTime] = useState("");
   const [sleepTime, setSleepTime] = useState("");
   const [studyHours, setStudyHours] = useState("");
   const [lunchTime, setLunchTime] = useState("");
   const [studyPref, setStudyPref] = useState<"day" | "night">("day");
+
+  const buildSchedulePrompt = (
+    studentName: string,
+    generation: string,
+    wake: string,
+    sleep: string,
+    hours: string,
+    lunch: string,
+    pref: "day" | "night",
+  ) => {
+    const inputs = lang === "ar"
+      ? `بيانات الطالب:
+- الاسم: ${studentName}
+- الجيل: ${generation}
+- وقت الاستيقاظ: ${wake}
+- وقت النوم المفضل: ${sleep}
+- عدد ساعات الدراسة المطلوبة: ${hours} ساعة
+- وقت الغداء: ${lunch}
+- وقت التركيز الأفضل: ${pref === "day" ? "النهار" : "الليل"}`
+      : `Student data:
+- Name: ${studentName}
+- Generation: ${generation}
+- Wake-up time: ${wake}
+- Preferred sleep time: ${sleep}
+- Required study hours: ${hours}h
+- Lunch time: ${lunch}
+- Peak focus period: ${pref === "day" ? "Daytime" : "Nighttime"}`;
+
+    const system = lang === "ar"
+      ? `أنت مخطط دراسي شخصي ذكي. مهمتك بناء جدول يوم متكامل لا يتعارض مع روتين الطالب أبداً.
+قواعد صارمة:
+1) ابدأ بوقت الاستيقاظ المحدد بالضبط، وانتهِ قبل وقت النوم بـ30 دقيقة على الأقل (تهدئة).
+2) خصّص ساعة كاملة للغداء بدءاً من الوقت المحدد، ولا تضع أي جلسة دراسة فيها.
+3) وزّع ساعات الدراسة المطلوبة على شكل جلسات بومودورو (50 دقيقة دراسة + 10 دقائق راحة).
+4) إذا التركيز الأفضل بالنهار، ضع الجلسات الأصعب صباحاً قبل الغداء.
+5) إذا التركيز الأفضل بالليل، ضع الجلسات الأساسية بعد العصر/المغرب.
+6) أضف فترات راحة قصيرة وأوقات صلاة (فجر/ظهر/عصر/مغرب/عشاء) في مواقيتها التقريبية.
+7) لا تتجاوز إجمالي ساعات الدراسة المطلوبة.
+
+أخرج النتيجة كـ JSON صالح فقط (بدون أي نص قبل أو بعد) بهذه البنية بالضبط:
+{
+  "studentName": string,
+  "inputs": { "wake": "HH:MM", "sleep": "HH:MM", "hours": string, "lunch": "HH:MM", "pref": "day"|"night" },
+  "events": [
+    { "start": "HH:MM", "end": "HH:MM", "kind": "morning"|"study"|"break"|"lunch"|"prayer"|"wind"|"other", "label": string, "emoji": string }
+  ],
+  "tips": [string, string, ...],
+  "scheduledMinutes": number,
+  "requestedMinutes": number
+}
+استخدم الإيموجي المناسب لكل نوع: ☀️ للاستيقاظ، 📚 للدراسة، ☕ للاستراحة، 🍽️ للغداء، 🕌 للصلاة، 🌙 للتهدئة.`
+      : `You are a smart personal study planner. Build a full-day schedule that never conflicts with the student's chosen routine.
+Strict rules:
+1) Start exactly at the wake-up time and finish at least 30 minutes before sleep (wind-down).
+2) Reserve a full hour for lunch starting at the given time — no study sessions there.
+3) Split required study hours into Pomodoro blocks (50 min study + 10 min break).
+4) If peak focus is daytime, place hardest sessions before lunch.
+5) If peak focus is nighttime, place core sessions after late afternoon.
+6) Insert short breaks and approximate prayer times.
+7) Do not exceed the required total study hours.
+
+Return ONLY valid JSON (no prose before/after) with this exact shape:
+{
+  "studentName": string,
+  "inputs": { "wake": "HH:MM", "sleep": "HH:MM", "hours": string, "lunch": "HH:MM", "pref": "day"|"night" },
+  "events": [
+    { "start": "HH:MM", "end": "HH:MM", "kind": "morning"|"study"|"break"|"lunch"|"prayer"|"wind"|"other", "label": string, "emoji": string }
+  ],
+  "tips": [string, ...],
+  "scheduledMinutes": number,
+  "requestedMinutes": number
+}
+Emoji guide: ☀️ wake, 📚 study, ☕ break, 🍽️ lunch, 🕌 prayer, 🌙 wind-down.`;
+
+    return { system, user: inputs };
+  };
+
+  const generateLocalSchedule = (
+    studentName: string,
+    wake: string,
+    sleep: string,
+    hours: string,
+    lunch: string,
+    pref: "day" | "night",
+  ): StructuredSchedule => {
+    const toMin = (hhmm: string) => {
+      const [h, m] = hhmm.split(":").map(Number);
+      return h * 60 + (m || 0);
+    };
+    const fmt = (m: number) => {
+      const w = ((m % 1440) + 1440) % 1440;
+      return `${String(Math.floor(w / 60)).padStart(2, "0")}:${String(w % 60).padStart(2, "0")}`;
+    };
+
+    const wakeM = toMin(wake);
+    let sleepM = toMin(sleep);
+    if (sleepM <= wakeM) sleepM += 24 * 60;
+    const lunchM = toMin(lunch) < wakeM ? toMin(lunch) + 24 * 60 : toMin(lunch);
+    const studyTarget = Math.max(0, Math.round(parseFloat(hours) * 60));
+    const dayEnd = sleepM - 30;
+
+    type Slot = { start: number; end: number; kind: string; label: string };
+    const fixed: Slot[] = [
+      { start: wakeM, end: wakeM + 30, kind: "morning",
+        label: lang === "ar" ? "☀️ استيقاظ وإفطار" : "☀️ Wake & breakfast" },
+      { start: lunchM, end: lunchM + 60, kind: "lunch",
+        label: lang === "ar" ? "🍽️ الغداء واستراحة" : "🍽️ Lunch break" },
+      { start: dayEnd, end: sleepM, kind: "wind",
+        label: lang === "ar" ? "🌙 تهدئة قبل النوم" : "🌙 Wind-down" },
+    ];
+
+    const prayers: Slot[] = lang === "ar"
+      ? [
+          { start: 12 * 60 + 30, end: 12 * 60 + 45, kind: "prayer", label: "🕌 صلاة الظهر" },
+          { start: 15 * 60 + 45, end: 16 * 60, kind: "prayer", label: "🕌 صلاة العصر" },
+          { start: 18 * 60 + 30, end: 18 * 60 + 45, kind: "prayer", label: "🕌 صلاة المغرب" },
+          { start: 20 * 60, end: 20 * 60 + 15, kind: "prayer", label: "🕌 صلاة العشاء" },
+        ].filter(p => p.start >= wakeM && p.end <= dayEnd)
+      : [];
+
+    const events: Slot[] = [...fixed, ...prayers];
+
+    const overlaps = (a: Slot, b: Slot) => !(a.end <= b.start || a.start >= b.end);
+    const isBusy = (s: number, e: number) =>
+      events.some(ev => overlaps({ start: s, end: e } as Slot, ev));
+
+    const blockStudy = 50;
+    const blockBreak = 10;
+    let remaining = studyTarget;
+
+    const dayStart = wakeM + 30;
+    const nightCore = Math.max(18 * 60, lunchM + 60);
+    let cursor = pref === "night" && nightCore < dayEnd - blockStudy ? nightCore : dayStart;
+
+    let safety = 100;
+    while (remaining > 0 && cursor + Math.min(remaining, blockStudy) <= dayEnd && safety-- > 0) {
+      const studyDur = Math.min(blockStudy, remaining);
+      const tentative: Slot = {
+        start: cursor, end: cursor + studyDur, kind: "study",
+        label: lang === "ar" ? "📚 جلسة دراسة (Pomodoro)" : "📚 Study session (Pomodoro)",
+      };
+      if (isBusy(tentative.start, tentative.end)) {
+        const blocker = events.filter(ev => overlaps(tentative, ev)).sort((a, b) => b.end - a.end)[0];
+        cursor = blocker ? blocker.end : cursor + 15;
+        continue;
+      }
+      events.push(tentative);
+      remaining -= studyDur;
+      cursor += studyDur;
+      if (remaining > 0 && cursor + blockBreak <= dayEnd && !isBusy(cursor, cursor + blockBreak)) {
+        events.push({
+          start: cursor, end: cursor + blockBreak, kind: "break",
+          label: lang === "ar" ? "☕ استراحة قصيرة" : "☕ Short break",
+        });
+        cursor += blockBreak;
+      }
+    }
+
+    events.sort((a, b) => a.start - b.start);
+
+    const L = (ar: string, en: string) => (lang === "ar" ? ar : en);
+    const emojiFor = (kind: string) => {
+      switch (kind) {
+        case "morning": return "☀️";
+        case "lunch": return "🍽️";
+        case "wind": return "🌙";
+        case "prayer": return "🕌";
+        case "study": return "📚";
+        case "break": return "☕";
+        default: return "✨";
+      }
+    };
+
+    const tips: string[] = [];
+    tips.push(pref === "day"
+      ? L("استغل صباحك لأصعب المواد، تركيزك في ذروته قبل الغداء.",
+          "Tackle your hardest subject in the morning — focus peaks before lunch.")
+      : L("اجعل المساء وقت المراجعة العميقة، وخفف من النشاط نهاراً لتوفير الطاقة.",
+          "Reserve the evening for deep review; keep daytime activity light to conserve energy."));
+    tips.push(L(
+      "بعد كل 4 جلسات بومودورو خذ راحة طويلة 20–30 دقيقة.",
+      "After every 4 Pomodoros, take a 20–30 minute long break.",
+    ));
+    tips.push(L(
+      "لا تختصر النوم؛ 7–8 ساعات تثبّت ما درسته.",
+      "Don't sacrifice sleep — 7–8h consolidates memory.",
+    ));
+    if (remaining > 0) {
+      const scheduledH = Math.round((studyTarget - remaining) / 60 * 10) / 10;
+      tips.push(L(
+        `⚠️ وقتك المتاح ضيّق — تم إدراج ${scheduledH} ساعة من أصل ${hours} ساعات مطلوبة.`,
+        `⚠️ Available time was tight: scheduled ${scheduledH}h of the requested ${hours}h.`,
+      ));
+    }
+
+    return {
+      studentName,
+      inputs: { wake, sleep, hours, lunch, pref },
+      events: events.map(ev => ({
+        start: fmt(ev.start),
+        end: fmt(ev.end),
+        kind: ev.kind as ScheduleEvent["kind"],
+        label: ev.label.replace(/^[\p{Emoji}\s]+/u, "").trim() || ev.label,
+        emoji: emojiFor(ev.kind),
+      })),
+      tips,
+      scheduledMinutes: studyTarget - remaining,
+      requestedMinutes: studyTarget,
+    };
+  };
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -3295,32 +3949,52 @@ function ScheduleDashboard({
     setIsGenerating(true);
     setShowForm(false);
 
+    const { system, user: userInputs } = buildSchedulePrompt(
+      user.name, user.generation, wakeTime, sleepTime, studyHours, lunchTime, studyPref,
+    );
+
+    let aiData: StructuredSchedule | null = null;
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
+      let apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey || apiKey === "undefined" || apiKey === "MY_GEMINI_API_KEY" || apiKey === '""') {
-        throw new Error("GEMINI_API_KEY is not configured or is using default placeholder. Please set a valid key in the AI Studio Settings (Secrets) panel.");
+        apiKey = undefined;
       }
-      const genAI = new GoogleGenAI({ apiKey });
-      const prompt = lang === "ar" 
-        ? `أنت مستشار دراسي خبير وموجه أكاديمي. أريدك أن تصنع جدول يومي دراسي ذكي ومفصل لطالب يدرس في التوجيهي (الثانوية العامة) جيل ${user.generation}. الطالب اسمه ${user.name}. يستيقظ الطالب عادة في الساعة ${wakeTime}، وينام في الساعة ${sleepTime}. يريد الطالب أن يدرس ${studyHours} ساعات يومياً، ويتناول الغداء في الساعة ${lunchTime}. يكون تركيز الطالب في أعلى مستوياته في فترة ${studyPref === "day" ? "النهار" : "الليل"}. بناء على هذه الأجوبة، ولد جدول خاص بالطالب يراعي أوقات الراحة خلال اليوم (مثلاً وقت راحة أثناء موعد الغداء) وحدد له جلسات دراسية خلال اليوم تتماشى معه بشكل مناسب مبنية على نظام المؤقت (مثلاً بومودورو). يرجى تنظيم الجدول بالساعات بشكل منطقي متضمنا أوقات للصلاة والاستراحة، ونصائح تحفيزية. اكتب الرد بتنسيق Markdown بشكل جميل.`
-        : `You are an expert academic advisor. Please create a smart and detailed daily study schedule for a high school student of generation ${user.generation}. The student's name is ${user.name}. The student wakes up at ${wakeTime}, sleeps at ${sleepTime}, wants to study for ${studyHours} hours, and has lunch at ${lunchTime}. the student's focus is best during the ${studyPref === "day" ? "daytime" : "nighttime"}. Based on these answers, generate a custom schedule that includes rest times (e.g., during lunch), and define study sessions throughout the day that align with a timer system like Pomodoro. Please organize the schedule by logical hours, including time for prayers, breaks, and motivational tips. Return the response in nicely formatted Markdown.`;
-
-      const response = await genAI.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-      });
-
-      const text = response.text;
-      if (text) {
-        setSchedule(text);
-        localStorage.setItem("enjez_ai_schedule", text);
+      if (apiKey) {
+        const genAI = new GoogleGenAI({ apiKey });
+        const response = await genAI.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: [{ role: "user", parts: [{ text: userInputs }] }],
+          config: { systemInstruction: system },
+        });
+        const raw = response.text || "";
+        const match = raw.match(/\{[\s\S]*\}/);
+        if (match) {
+          const parsed = JSON.parse(match[0]) as Partial<StructuredSchedule>;
+          if (parsed && Array.isArray(parsed.events) && parsed.events.length) {
+            aiData = {
+              studentName: parsed.studentName || user.name,
+              inputs: parsed.inputs || { wake: wakeTime, sleep: sleepTime, hours: studyHours, lunch: lunchTime, pref: studyPref },
+              events: parsed.events as ScheduleEvent[],
+              tips: parsed.tips || [],
+              scheduledMinutes: parsed.scheduledMinutes ?? 0,
+              requestedMinutes: parsed.requestedMinutes ?? Math.round(parseFloat(studyHours) * 60),
+            };
+          }
+        }
       }
     } catch (error) {
-      console.error(error);
-      setSchedule(lang === "ar" ? "حدث خطأ أثناء إنشاء الجدول، يرجى المحاولة لاحقاً." : "Error generating schedule, please try again.");
-    } finally {
-      setIsGenerating(false);
+      console.error("AI schedule failed, falling back to local planner:", error);
     }
+
+    const data = aiData || generateLocalSchedule(
+      user.name, wakeTime, sleepTime, studyHours, lunchTime, studyPref,
+    );
+
+    setScheduleData(data);
+    localStorage.setItem("enjez_schedule_data", JSON.stringify(data));
+    setSchedule(null);
+    localStorage.removeItem("enjez_ai_schedule");
+    setIsGenerating(false);
   };
 
   return (
@@ -3505,6 +4179,14 @@ function ScheduleDashboard({
                 {t.scheduleGenerating}
               </h2>
             </motion.div>
+          ) : scheduleData ? (
+            <motion.div
+              key="schedule-data"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <ScheduleView data={scheduleData} theme={theme} lang={lang} />
+            </motion.div>
           ) : schedule ? (
             <motion.div
               key="schedule"
@@ -3513,7 +4195,7 @@ function ScheduleDashboard({
               className="bg-white rounded-[2.5rem] p-8 md:p-12 shadow-[0_20px_50px_rgba(3,19,188,0.04)] border border-transparent"
               style={{ borderColor: `${theme.primary}10` }}
             >
-              <div 
+              <div
                 className="markdown-body prose max-w-none prose-p:text-gray-700 prose-headings:text-[#0313bc]"
               >
                 <Markdown>{schedule}</Markdown>
@@ -3543,17 +4225,64 @@ function WikiWikiBot({
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Gemini Setup
-  let apiKey = process.env.GEMINI_API_KEY;
-  if (apiKey === "undefined" || apiKey === "MY_GEMINI_API_KEY" || apiKey === '""') {
-    apiKey = undefined;
-  }
-  const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
-  const model = "gemini-3-flash-preview";
-
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const generateLocalReply = (msg: string, studentName: string): string => {
+    const text = msg.toLowerCase().trim();
+    const has = (...words: string[]) => words.some((w) => text.includes(w));
+
+    if (has("مرحبا", "السلام", "اهلا", "أهلا", "hi", "hello", "hey")) {
+      return `أهلاً ${studentName}! أنا ويكي ويكي 🤖 جاهز أساعدك في مذاكرتك. اسألني عن أي شي يخص دراستك.`;
+    }
+    if (has("كيف حالك", "كيفك", "شو الأخبار")) {
+      return "تمام الحمد لله! كيفك إنت؟ جاهز نراجع سوا؟";
+    }
+    if (has("امتحان", "اختبار", "توجيهي")) {
+      return "خلّيك هادي 💪 رتّب وقتك، نام كويس قبل الامتحان، وراجع رؤوس الأقلام بدل ما تحفظ كل شي بالليلة الأخيرة. ثقتي فيك!";
+    }
+    if (has("تركيز", "ما اقدر اركز", "مشتت", "ملل")) {
+      return "جرّب طريقة بومودورو: 25 دقيقة دراسة + 5 دقايق راحة، ولما تخلّص 4 جلسات خذ راحة 20 دقيقة. وأبعد التلفون عنك خلال الجلسة 📵";
+    }
+    if (has("مذاكرة", "دراسة", "ادرس", "كيف اذاكر")) {
+      return "أهم شي: اقرأ الدرس مرة فهم، بعدين لخّصه بكلماتك، وحلّ أسئلة عليه. الفهم أهم من الحفظ، والمراجعة المتباعدة تثبّت المعلومة.";
+    }
+    if (has("رياضيات", "رياضة", "math")) {
+      return "الرياضيات حلّ، حلّ، حلّ. ما في طريق غيره. ابدأ من الأسئلة الأساسية ثم انتقل للتطبيقات. ولو علّقت بسؤال، ارجع للقاعدة.";
+    }
+    if (has("فيزياء", "physics")) {
+      return "الفيزياء فهم القانون قبل تطبيقه. ارسم الموقف، حدد المعطيات والمطلوب، وبعدين اختار القانون المناسب.";
+    }
+    if (has("كيمياء", "chemistry")) {
+      return "الكيمياء حفظ + فهم. احفظ الجدول الدوري والتفاعلات الأساسية، وافهم الميكانيزم بدل تحفظ الناتج بس.";
+    }
+    if (has("احياء", "أحياء", "biology")) {
+      return "الأحياء قصة مترابطة، ما تحفظ معلومات منعزلة. اربط بين الأنظمة (هضمي، تنفسي، عصبي…) وارسم مخططات.";
+    }
+    if (has("انجليزي", "إنجليزي", "english")) {
+      return "Reading + writing every day. اقرأ نصوص قصيرة يومياً، احفظ 5 كلمات جديدة، وحاول تكتب جملة فيهم. الممارسة هي السر.";
+    }
+    if (has("عربي", "عربية", "نحو", "بلاغة")) {
+      return "العربي: ركّز على القواعد الأساسية (الإعراب، الأبواب النحوية)، وحلّ نصوص. القراءة المستمرة بتقوّي حسّك اللغوي.";
+    }
+    if (has("نوم", "تعبان", "ما نمت")) {
+      return "النوم جزء من الدراسة مش ضدها 😴 7-8 ساعات نوم بتخلّي دماغك يثبّت المعلومات. ما تضحّي فيه.";
+    }
+    if (has("قلق", "خايف", "متوتر", "ضغط")) {
+      return "خذ نفس عميق 🌬️ التوتر طبيعي بس ما تخلّيه يسيطر عليك. قسّم المهام لخطوات صغيرة، وكل خطوة تخلّصها هي إنجاز.";
+    }
+    if (has("جدول", "تنظيم", "خطة")) {
+      return "ابدأ بجدول أسبوعي بسيط: حدّد ساعات الدراسة الثابتة، وزّع المواد عليها، واترك يوم مراجعة بالأسبوع. لا تحشر اليوم بالكامل.";
+    }
+    if (has("شكر", "thanks", "thank")) {
+      return "العفو! 💙 أنا هون متى ما احتجت. بالتوفيق يا بطل!";
+    }
+    if (has("?", "؟", "كيف", "ليش", "ايش", "شو", "متى", "وين", "what", "why", "how")) {
+      return `سؤال حلو يا ${studentName}! حالياً بشتغل بوضع محلي بدون اتصال إنترنت، فأقدر أساعدك بنصائح دراسية عامة، تنظيم وقت، وطرق المذاكرة. جرّب تسألني عن مادة معينة أو طريقة دراسة.`;
+    }
+    return `استلمت رسالتك يا ${studentName} ✨ أنا ويكي ويكي بوضع محلي حالياً. أقدر أساعدك بنصائح عن المذاكرة، التركيز، تنظيم الوقت، أو أي مادة بالتوجيهي. شو موضوعك؟`;
+  };
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -3563,36 +4292,12 @@ function WikiWikiBot({
     setMessages((prev) => [...prev, { role: "user", text: userMsg }]);
     setIsLoading(true);
 
-    if (!ai) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "ai", text: "عذرًا، مفتاح API غير صالح أو غير مهيأ. يرجى التأكد من إعدادات المفتاح." },
-      ]);
+    const reply = generateLocalReply(userMsg, user.name);
+    const delay = 400 + Math.min(userMsg.length * 12, 800);
+    setTimeout(() => {
+      setMessages((prev) => [...prev, { role: "ai", text: reply }]);
       setIsLoading(false);
-      return;
-    }
-
-    try {
-      const response = await ai.models.generateContent({
-        model,
-        contents: [{ role: "user", parts: [{ text: userMsg }] }],
-        config: {
-          systemInstruction: `You are Wiki Wiki, a helpful Arabic-speaking study assistant for a student named ${user.name}. Keep your responses encouraging, short, and in Jordanian/Levantine dialect if possible. Use study tips and motivation.`,
-        },
-      });
-
-      setMessages((prev) => [
-        ...prev,
-        { role: "ai", text: response.text || "عذرًا، حدث خطأ ما." },
-      ]);
-    } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "ai", text: "عذرًا، لا أستطيع الرد حاليًا." },
-      ]);
-    } finally {
-      setIsLoading(false);
-    }
+    }, delay);
   };
 
   return (
