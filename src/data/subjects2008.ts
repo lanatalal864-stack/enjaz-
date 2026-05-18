@@ -1,4 +1,4 @@
-import { SubjectConfig } from "../App";
+import type { SubjectConfig } from "../AppCore";
 
 export const subjects2008: SubjectConfig[] = [
   {
