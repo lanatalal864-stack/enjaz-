@@ -92,11 +92,10 @@ export function AuthPage({
               dir="ltr"
               aria-invalid={!!phoneError}
               aria-describedby="phone-error"
-              className={`w-full bg-[#f8f9ff] border-2 p-4 rounded-xl focus:bg-white outline-none transition-all font-medium tabular-nums placeholder:text-gray-400 ${
-                phoneError
+              className={`w-full bg-[#f8f9ff] border-2 p-4 rounded-xl focus:bg-white outline-none transition-all font-medium tabular-nums placeholder:text-gray-400 ${phoneError
                   ? "border-red-400 focus:border-red-500"
                   : "border-transparent focus:border-[--theme-primary]/20"
-              }`}
+                }`}
               value={formData.phone}
               onChange={(e) => handlePhoneChange(e.target.value)}
               onBlur={() => {

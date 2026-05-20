@@ -20,7 +20,50 @@ import './index.css';
 // settings, classroom, auth pages, etc.) is only temporarily hidden and will
 // resume working exactly as before once the flag is flipped off.
 // =============================================================================
-const LAUNCH_LOCK_ENABLED = true;
+// Flip this back to `true` to re-lock the platform behind /qr + /coming-soon.
+// The full lockdown logic, dev-secret bypass, and route guards below are all
+// preserved — they simply short-circuit while this flag is false, so toggling
+// it back on later requires no code changes.
+const LAUNCH_LOCK_ENABLED = false;
+
+// =============================================================================
+// DEVELOPER BYPASS
+// Visit any URL with ?dev=enjezmode once and the launch lock is permanently
+// disabled on this device (a `is_developer=true` flag is written to
+// localStorage). The query parameter is stripped from the URL so the link
+// stays clean. Clear localStorage or run
+//   localStorage.removeItem('is_developer')
+// in DevTools to re-enable the lock on this device.
+// =============================================================================
+const DEV_SECRET = 'enjezmode';
+const DEV_STORAGE_KEY = 'is_developer';
+
+function consumeDevSecret(): void {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('dev') === DEV_SECRET) {
+      localStorage.setItem(DEV_STORAGE_KEY, 'true');
+      params.delete('dev');
+      const qs = params.toString();
+      const cleaned = window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash;
+      window.history.replaceState({}, '', cleaned);
+    }
+  } catch {
+    // ignore (e.g. private mode storage errors)
+  }
+}
+
+function isDeveloper(): boolean {
+  try {
+    return localStorage.getItem(DEV_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+// Run the secret check immediately on module load so the rest of routing sees
+// the developer flag on the very first paint.
+consumeDevSecret();
 
 type Route = 'qr' | 'coming-soon' | 'app' | 'redirect';
 
@@ -30,6 +73,9 @@ const COMING_SOON_PATHS = ['/coming-soon', '/coming-soon/'];
 function getRoute(pathname: string): Route {
   if (QR_PATHS.includes(pathname)) return 'qr';
   if (COMING_SOON_PATHS.includes(pathname)) return 'coming-soon';
+
+  // Developer bypass: skip the launch lock entirely.
+  if (isDeveloper()) return 'app';
 
   if (LAUNCH_LOCK_ENABLED) {
     // Root shows the QR landing page first.
